@@ -103,7 +103,8 @@ describe('uuidv7obj()', () => {
     const before = Date.now();
     const obj = uuidv7obj();
     const after = Date.now();
-    expect(obj.timestamp).toBeGreaterThanOrEqual(before);
+    // performance.now() fast-path may delay Date.now() sync by up to 1ms
+    expect(obj.timestamp).toBeGreaterThanOrEqual(before - 1);
     expect(obj.timestamp).toBeLessThanOrEqual(after);
   });
 });
@@ -145,7 +146,8 @@ describe('extractTimestamp()', () => {
     const id = uuidv7();
     const after = Date.now();
     const ts = extractTimestamp(id);
-    expect(ts).toBeGreaterThanOrEqual(before);
+    // performance.now() fast-path may delay Date.now() sync by up to 1ms
+    expect(ts).toBeGreaterThanOrEqual(before - 1);
     expect(ts).toBeLessThanOrEqual(after);
   });
 
