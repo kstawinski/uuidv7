@@ -40,6 +40,22 @@ class V7Generator {
   private pf = '';
   private sx = '';
 
+  // performance.now() state for fast ms-change detection.
+  // Hot path uses performance.now() (~22ns) instead of Date.now() (~26ns).
+  // Date.now() is only called in the cold path for accurate timestamps.
+  private lastPerf = -1;
+  private readonly perfNow: (() => number) | null;
+
+  constructor() {
+    // Resolve performance.now() at construction time.
+    // Available in Node 16+, all modern browsers, edge runtimes.
+    const perf = typeof globalThis !== 'undefined'
+      ? (globalThis as Record<string, unknown>).performance as
+          { now(): number } | undefined
+      : undefined;
+    this.perfNow = perf?.now ? () => perf.now() : null;
+  }
+
   /**
    * Cold path: initialize state for a new millisecond.
    * Fills random, seeds counter, writes timestamp, caches strings.
@@ -81,16 +97,40 @@ class V7Generator {
     this.newMs(this.lastMs);
   }
 
-  generate(): UUIDv7 {
+  /**
+   * Cold path check: called when performance.now() delta indicates
+   * a potential new millisecond. Calls Date.now() for the accurate
+   * timestamp and reseeds only if the ms actually changed.
+   */
+  private checkMs(): void {
     const now = Date.now();
-
     if (now > this.lastMs) {
       this.newMs(now);
-    } else if (++this.seq > 0xfff) {
+    }
+  }
+
+  generate(): UUIDv7 {
+    // Fast ms-change detection via performance.now() (~22ns vs ~26ns for Date.now).
+    // The delta check fires roughly once per ms, calling Date.now() only then.
+    // For environments without performance.now(), falls back to Date.now() every call.
+    const pn = this.perfNow;
+    if (pn !== null) {
+      const t = pn();
+      if (t - this.lastPerf >= 0.7) {
+        this.lastPerf = t;
+        this.checkMs();
+      }
+    } else {
+      const now = Date.now();
+      if (now > this.lastMs) {
+        this.newMs(now);
+      }
+    }
+
+    if (++this.seq > 0xfff) {
       this.handleOverflow();
     }
 
-    // Hot path: 2 concats from cached strings + pre-computed counter hex
     return (this.pf + VC[this.seq] + this.sx) as UUIDv7;
   }
 
