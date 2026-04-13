@@ -1,23 +1,32 @@
 // Nibble-to-hex character lookup string.
-// V8 inlines charAt() on a string constant to a direct character access,
-// making this faster than an array-based hex table.
+// V8 optimizes bracket access on short constant strings to a direct load.
 export const DIGITS = '0123456789abcdef';
 
 /**
  * Convert a 16-byte Uint8Array to a UUID-formatted string.
- * Uses charAt on a constant string — V8 optimizes this pattern
- * better than array-based lookup tables.
+ * Fully unrolled — eliminates the loop overhead and hyphen-position branches
+ * that the for-loop version pays on every iteration.
  */
-export function bytesToUuid(bytes: Uint8Array): string {
-  let text = '';
-  for (let i = 0; i < 16; i++) {
-    text += DIGITS.charAt(bytes[i] >>> 4);
-    text += DIGITS.charAt(bytes[i] & 0xf);
-    if (i === 3 || i === 5 || i === 7 || i === 9) {
-      text += '-';
-    }
-  }
-  return text;
+export function bytesToUuid(b: Uint8Array): string {
+  const d = DIGITS;
+  return (
+    d[b[0] >>> 4] + d[b[0] & 0xf] +
+    d[b[1] >>> 4] + d[b[1] & 0xf] +
+    d[b[2] >>> 4] + d[b[2] & 0xf] +
+    d[b[3] >>> 4] + d[b[3] & 0xf] + '-' +
+    d[b[4] >>> 4] + d[b[4] & 0xf] +
+    d[b[5] >>> 4] + d[b[5] & 0xf] + '-' +
+    d[b[6] >>> 4] + d[b[6] & 0xf] +
+    d[b[7] >>> 4] + d[b[7] & 0xf] + '-' +
+    d[b[8] >>> 4] + d[b[8] & 0xf] +
+    d[b[9] >>> 4] + d[b[9] & 0xf] + '-' +
+    d[b[10] >>> 4] + d[b[10] & 0xf] +
+    d[b[11] >>> 4] + d[b[11] & 0xf] +
+    d[b[12] >>> 4] + d[b[12] & 0xf] +
+    d[b[13] >>> 4] + d[b[13] & 0xf] +
+    d[b[14] >>> 4] + d[b[14] & 0xf] +
+    d[b[15] >>> 4] + d[b[15] & 0xf]
+  );
 }
 
 /**

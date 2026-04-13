@@ -33,45 +33,49 @@ class V7Generator {
   private readonly pool = new EntropyPool();
 
   /**
+   * Cold path: initialize state for a new millisecond.
+   * Writes timestamp, fills random bytes, seeds counter.
+   * Separated from generate() so V8 can optimize the hot path independently.
+   */
+  private newMs(now: number): void {
+    this.lastMs = now;
+    this.pool.fill(this.b, 6, 10); // rand_a seed + rand_b
+    this.seq = ((this.b[6] & 0x0f) << 8) | this.b[7];
+
+    // Write 48-bit timestamp
+    const b = this.b;
+    b[0] = (now / 0x0000_0100_0000_0000) & 0xff;
+    b[1] = (now / 0x0000_0001_0000_0000) & 0xff;
+    b[2] = (now / 0x0000_0000_0100_0000) & 0xff;
+    b[3] = (now / 0x0000_0000_0001_0000) & 0xff;
+    b[4] = (now / 0x0000_0000_0000_0100) & 0xff;
+    b[5] = now & 0xff;
+  }
+
+  /**
    * Handle 12-bit counter overflow.
-   * Increments the synthetic timestamp by 1ms and reseeds the counter.
+   * Increments the synthetic timestamp by 1ms and reseeds.
    * This matches RFC 9562 Section 6.2 guidance and avoids spin-waiting,
    * which would cause V8 JIT deoptimization of the entire generate() method.
    */
   private handleOverflow(): void {
     this.lastMs++;
-    this.pool.fill(this.b, 6, 10);
-    this.seq = ((this.b[6] & 0x0f) << 8) | this.b[7];
+    this.newMs(this.lastMs);
   }
 
   generate(): UUIDv7 {
     const now = Date.now();
 
     if (now > this.lastMs) {
-      // New millisecond: seed counter from random
-      this.lastMs = now;
-      this.pool.fill(this.b, 6, 10); // rand_a seed + rand_b
-      this.seq = ((this.b[6] & 0x0f) << 8) | this.b[7];
+      this.newMs(now);
     } else if (++this.seq > 0xfff) {
-      // Counter overflow: bump synthetic timestamp and reseed
       this.handleOverflow();
     }
 
-    // Write timestamp (48 bits) — always written for correctness
+    // Hot path: only write version + counter + variant (timestamp unchanged)
     const b = this.b;
-    const ms = this.lastMs;
-    b[0] = (ms / 0x0000_0100_0000_0000) & 0xff;
-    b[1] = (ms / 0x0000_0001_0000_0000) & 0xff;
-    b[2] = (ms / 0x0000_0000_0100_0000) & 0xff;
-    b[3] = (ms / 0x0000_0000_0001_0000) & 0xff;
-    b[4] = (ms / 0x0000_0000_0000_0100) & 0xff;
-    b[5] = ms & 0xff;
-
-    // Write version (7) + 12-bit counter
     b[6] = 0x70 | ((this.seq >>> 8) & 0x0f);
     b[7] = this.seq & 0xff;
-
-    // Write variant (10xx) — preserves random bits in lower 6 bits
     b[8] = (b[8] & 0x3f) | 0x80;
 
     return bytesToUuid(b) as UUIDv7;
