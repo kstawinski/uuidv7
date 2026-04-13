@@ -1,4 +1,4 @@
-import { bytesToUuid, EntropyPool, HEX2 } from './utils.js';
+import { EntropyPool, HEX, VC } from './utils.js';
 
 /**
  * Branded type for UUIDv7 strings.
@@ -19,27 +19,30 @@ export interface UUIDv7Object {
 }
 
 // ============================================================
-// V7Generator: class-based generator for optimal V8 JIT.
+// V7Generator
 //
-// V8 optimizes class instances with stable hidden classes far
-// better than module-scope let variables. All mutable state is
-// kept as instance properties.
+// Class-based for V8 hidden-class optimization. Hot path is
+// minimal: Date.now() + counter increment + 2 string concats
+// from cached prefix/suffix. Cold path (once per ms) rebuilds
+// the cached strings and reseeds entropy.
 // ============================================================
 
 class V7Generator {
   private lastMs = 0;
   private seq = 0;         // 12-bit monotonic counter (rand_a)
   private readonly b = new Uint8Array(16);
-  private readonly dv: DataView;
   private readonly pool = new EntropyPool();
 
-  constructor() {
-    this.dv = new DataView(this.b.buffer);
-  }
+  // Cached string segments — rebuilt once per millisecond in newMs().
+  // prefix: "HHHHHHHH-HHHH-"  (14 chars: timestamp hex + hyphens)
+  // suffix: "-HHHH-HHHHHHHHHHHH" (18 chars: variant+rand_b hex)
+  // Hot path just does: prefix + VC[seq] + suffix  (2 concats)
+  private pf = '';
+  private sx = '';
 
   /**
    * Cold path: initialize state for a new millisecond.
-   * Writes timestamp, fills random bytes, seeds counter.
+   * Fills random, seeds counter, writes timestamp, caches strings.
    * Separated from generate() so V8 can optimize the hot path independently.
    */
   private newMs(now: number): void {
@@ -47,7 +50,7 @@ class V7Generator {
     this.pool.fill10(this.b, 6); // rand_a seed + rand_b
     this.seq = ((this.b[6] & 0x0f) << 8) | this.b[7];
 
-    // Set variant (10xx) once per ms — hot path skips this
+    // Set variant (10xx)
     this.b[8] = (this.b[8] & 0x3f) | 0x80;
 
     // Write 48-bit timestamp
@@ -58,13 +61,20 @@ class V7Generator {
     b[3] = (now / 0x0000_0000_0001_0000) & 0xff;
     b[4] = (now / 0x0000_0000_0000_0100) & 0xff;
     b[5] = now & 0xff;
+
+    // Cache prefix (timestamp) and suffix (variant + rand_b)
+    this.pf =
+      HEX[b[0]] + HEX[b[1]] + HEX[b[2]] + HEX[b[3]] + '-' +
+      HEX[b[4]] + HEX[b[5]] + '-';
+    this.sx =
+      '-' + HEX[b[8]] + HEX[b[9]] + '-' +
+      HEX[b[10]] + HEX[b[11]] + HEX[b[12]] +
+      HEX[b[13]] + HEX[b[14]] + HEX[b[15]];
   }
 
   /**
    * Handle 12-bit counter overflow.
    * Increments the synthetic timestamp by 1ms and reseeds.
-   * This matches RFC 9562 Section 6.2 guidance and avoids spin-waiting,
-   * which would cause V8 JIT deoptimization of the entire generate() method.
    */
   private handleOverflow(): void {
     this.lastMs++;
@@ -80,24 +90,15 @@ class V7Generator {
       this.handleOverflow();
     }
 
-    // Hot path: only write version + counter (timestamp & variant unchanged)
-    const b = this.b;
-    b[6] = 0x70 | ((this.seq >>> 8) & 0x0f);
-    b[7] = this.seq & 0xff;
-
-    // Build UUID string via byte-pair HEX2 table (8 lookups + 11 concats)
-    const dv = this.dv;
-    return (
-      HEX2[dv.getUint16(0)] + HEX2[dv.getUint16(2)] + '-' +
-      HEX2[dv.getUint16(4)] + '-' +
-      HEX2[dv.getUint16(6)] + '-' +
-      HEX2[dv.getUint16(8)] + '-' +
-      HEX2[dv.getUint16(10)] + HEX2[dv.getUint16(12)] + HEX2[dv.getUint16(14)]
-    ) as UUIDv7;
+    // Hot path: 2 concats from cached strings + pre-computed counter hex
+    return (this.pf + VC[this.seq] + this.sx) as UUIDv7;
   }
 
   generateObj(): UUIDv7Object {
     const value = this.generate();
+    // Sync buf[6..7] with current seq for byte-accurate output
+    this.b[6] = 0x70 | ((this.seq >>> 8) & 0x0f);
+    this.b[7] = this.seq & 0xff;
     const bytes = new Uint8Array(this.b);
     const b = this.b;
     const timestamp =

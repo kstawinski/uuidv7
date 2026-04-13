@@ -1,31 +1,17 @@
-// Pre-computed byte-to-hex lookup table (256 entries).
-const HEX: string[] = new Array(256);
+// Pre-computed byte-to-hex lookup table (256 entries, ~2.5KB).
+// Used in the cold path (once per ms) for building cached prefix/suffix strings.
+export const HEX: string[] = new Array(256);
 for (let i = 0; i < 256; i++) {
   HEX[i] = (i < 16 ? '0' : '') + i.toString(16);
 }
 
-// Pre-computed byte-pair to 4-char hex lookup table (65536 entries).
-// Trades ~1.5MB of runtime memory for a 33% throughput gain:
-// 8 lookups + 11 concats instead of 16 lookups + 20 concats.
-// The working set in practice is small (timestamp bytes change slowly,
-// version/variant are near-constant) so it stays hot in L2 cache.
-export const HEX2: string[] = new Array(65536);
-for (let i = 0; i < 65536; i++) {
-  HEX2[i] = HEX[(i >>> 8) & 0xff] + HEX[i & 0xff];
-}
-
-/**
- * Convert a 16-byte Uint8Array to a UUID-formatted string.
- * Uses byte-pair HEX2 table via DataView — 8 lookups + 11 concats.
- */
-export function bytesToUuid(b: Uint8Array, dv: DataView): string {
-  return (
-    HEX2[dv.getUint16(0)] + HEX2[dv.getUint16(2)] + '-' +
-    HEX2[dv.getUint16(4)] + '-' +
-    HEX2[dv.getUint16(6)] + '-' +
-    HEX2[dv.getUint16(8)] + '-' +
-    HEX2[dv.getUint16(10)] + HEX2[dv.getUint16(12)] + HEX2[dv.getUint16(14)]
-  );
+// Pre-computed version+counter table (4096 entries, ~48KB).
+// Maps each 12-bit counter value to its 4-char hex representation
+// with the version nibble (7) already baked in: "7000" through "7fff".
+// Used in the hot path for single-lookup counter stringification.
+export const VC: string[] = new Array(4096);
+for (let i = 0; i < 4096; i++) {
+  VC[i] = HEX[0x70 | ((i >>> 8) & 0x0f)] + HEX[i & 0xff];
 }
 
 /**
