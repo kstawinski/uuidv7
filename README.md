@@ -119,6 +119,10 @@ if (isValid(raw)) {
 
 ## Benchmarks
 
+<p align="center">
+  <img src="bench/results.png" alt="Benchmark results" width="700" />
+</p>
+
 <!-- BENCHMARK_RESULTS_START -->
 
 | Implementation | ops/sec | avg (ns) | Relative |
