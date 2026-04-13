@@ -1,0 +1,10 @@
+src/
+tests/
+bench/
+.claude/
+.github/
+tsconfig.json
+tsup.config.ts
+vitest.config.ts
+*.tsbuildinfo
+.DS_Store
