@@ -1,4 +1,4 @@
-import { bytesToUuid, EntropyPool, HEX } from './utils.js';
+import { bytesToUuid, EntropyPool, HEX2 } from './utils.js';
 
 /**
  * Branded type for UUIDv7 strings.
@@ -30,7 +30,12 @@ class V7Generator {
   private lastMs = 0;
   private seq = 0;         // 12-bit monotonic counter (rand_a)
   private readonly b = new Uint8Array(16);
+  private readonly dv: DataView;
   private readonly pool = new EntropyPool();
+
+  constructor() {
+    this.dv = new DataView(this.b.buffer);
+  }
 
   /**
    * Cold path: initialize state for a new millisecond.
@@ -80,12 +85,14 @@ class V7Generator {
     b[6] = 0x70 | ((this.seq >>> 8) & 0x0f);
     b[7] = this.seq & 0xff;
 
+    // Build UUID string via byte-pair HEX2 table (8 lookups + 11 concats)
+    const dv = this.dv;
     return (
-      HEX[b[0]] + HEX[b[1]] + HEX[b[2]] + HEX[b[3]] + '-' +
-      HEX[b[4]] + HEX[b[5]] + '-' +
-      HEX[b[6]] + HEX[b[7]] + '-' +
-      HEX[b[8]] + HEX[b[9]] + '-' +
-      HEX[b[10]] + HEX[b[11]] + HEX[b[12]] + HEX[b[13]] + HEX[b[14]] + HEX[b[15]]
+      HEX2[dv.getUint16(0)] + HEX2[dv.getUint16(2)] + '-' +
+      HEX2[dv.getUint16(4)] + '-' +
+      HEX2[dv.getUint16(6)] + '-' +
+      HEX2[dv.getUint16(8)] + '-' +
+      HEX2[dv.getUint16(10)] + HEX2[dv.getUint16(12)] + HEX2[dv.getUint16(14)]
     ) as UUIDv7;
   }
 

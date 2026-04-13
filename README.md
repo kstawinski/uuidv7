@@ -13,7 +13,7 @@ UUIDv7 embeds a Unix millisecond timestamp in the most significant bits, making 
 
 ## Features
 
-- **Performance first** — 13.7M ops/sec (~73ns/op). Entropy pooling, class-based V8 hidden-class optimization, `Uint8Array` + bitwise operations, minimal GC pressure. Faster than nanoid.
+- **Performance first** — 20M+ ops/sec (~48ns/op). Byte-pair hex table, entropy pooling, class-based V8 hidden-class optimization, `Uint8Array` + bitwise ops, minimal GC pressure. 2x faster than nanoid, 5.5x faster than uuidv7 npm.
 - **Monotonicity guaranteed** — implements RFC 9562 Section 6.2 (fixed-length dedicated counter bits + random).
 - **Zero dependencies** — no runtime dependencies, ever.
 - **Dual format** — ships ESM and CommonJS builds via `tsup`.
@@ -110,10 +110,10 @@ npm run bench
 
 | Implementation | ops/sec | avg (ns) | Relative |
 |---|---|---|---|
-| **@kstawinski/uuidv7** | **13,703,930** | **73** | **1.0x (baseline)** |
-| nanoid | 10,133,664 | 99 | 0.74x (not a UUID) |
-| uuidv7 (npm) | 3,724,522 | 269 | 0.27x |
-| uuid v7 | 1,165,336 | 858 | 0.09x |
+| **@kstawinski/uuidv7** | **20,792,933** | **48** | **1.0x (baseline)** |
+| nanoid | 9,497,152 | 105 | 0.46x (not a UUID) |
+| uuidv7 (npm) | 3,766,961 | 266 | 0.18x |
+| uuid v7 | 1,136,525 | 880 | 0.05x |
 
 <!-- BENCHMARK_RESULTS_END -->
 
