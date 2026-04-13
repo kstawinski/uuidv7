@@ -2,7 +2,7 @@
 
 Ultra-fast, zero-dependency UUIDv7 generator for TypeScript & JavaScript. Fully compliant with [RFC 9562](https://www.rfc-editor.org/rfc/rfc9562).
 
-**~21 ns/op** | **46M+ ops/sec** | **4.8x faster than nanoid** | **12x faster than uuidv7 (npm)**
+**~22 ns/op** | **45M ops/sec** | **4.7x faster than nanoid** | **12x faster than uuidv7 (npm)**
 
 ## Why UUIDv7?
 
@@ -15,7 +15,7 @@ UUIDv4 gives you random noise. UUIDv7 gives you **time-sorted, database-friendly
 
 ## Features
 
-- **46M+ ops/sec** — the fastest UUIDv7 implementation available. Outperforms even nanoid (which isn't a UUID).
+- **45M ops/sec** — the fastest UUIDv7 implementation available. Outperforms even nanoid (which isn't a UUID).
 - **Zero dependencies** — no runtime dependencies, ever. 2.5 KB minified.
 - **Type-safe** — branded `UUIDv7` type prevents mixing with plain strings at compile time.
 - **Dual format** — ships both ESM and CommonJS via `tsup`, with full `.d.ts` declarations.
@@ -127,14 +127,14 @@ if (isValid(raw)) {
 
 | Implementation | ops/sec | avg (ns) | Relative |
 |---|---|---|---|
-| **@kstawinski/uuidv7** | **46,682,145** | **21** | **baseline** |
-| nanoid | 9,646,684 | 104 | 4.8x slower |
-| uuidv7 (npm) | 3,835,111 | 261 | 12.2x slower |
-| uuid v7 | 1,163,861 | 859 | 40x slower |
+| **@kstawinski/uuidv7** | **44,936,903** | **22** | **baseline** |
+| nanoid | 9,650,045 | 104 | 4.7x slower |
+| uuid (v7) | 4,425,268 | 226 | 10x slower |
+| uuidv7 (npm) | 3,676,097 | 272 | 12x slower |
 
 <!-- BENCHMARK_RESULTS_END -->
 
-> Apple M-series, Node.js v24.4. Run `npm run bench` for your machine.
+> Isolated processes, `--expose-gc`, 5 rounds (median). Apple M-series, Node.js v24.4. Run `npm run bench -- --isolated` for your machine.
 
 <details>
 <summary>Run benchmarks yourself</summary>
@@ -160,15 +160,13 @@ The hot path (same-millisecond generation) executes just **4 operations**:
 
 Key optimizations discovered through V8 JIT profiling:
 
-| Technique | Impact |
-|---|---|
-| Eliminate spin-wait overflow | +354 ns — V8 refuses to JIT-optimize functions containing `while` loops with `Date.now()` |
-| `performance.now()` over `Date.now()` | +5 ns — cheaper syscall, called only for delta detection |
-| Cached prefix/suffix strings | +20 ns — rebuilt once per ms, hot path does 2 concats instead of 20 |
-| `VC[4096]` counter table | +5 ns — pre-computed "7xxx" hex for all 12-bit counter values |
-| Class-based generator | +350 ns — V8 hidden classes optimize property access far better than module-scope `let` |
-| 4096-byte entropy pool | amortizes `crypto.getRandomValues()` (675 ns) over ~409 calls |
-| Timestamp-increment on counter overflow | RFC 9562 compliant, avoids spin-wait deopt |
+| Technique | Improvement | How |
+|---|---|---|
+| Eliminate spin-wait overflow | 495 → 141 ns | V8 refuses to JIT-optimize functions containing `while` loops with `Date.now()`. Replaced with timestamp-increment (RFC 9562 compliant). |
+| HEX[256] byte table + unrolled stringify | 141 → 73 ns | 16 lookups + 20 concats instead of 32 charAt calls + loop overhead. |
+| Cached prefix/suffix + `VC[4096]` | 73 → 30 ns | Timestamp and rand_b hex cached once per ms. Hot path: `prefix + VC[seq] + suffix` (2 concats). |
+| `performance.now()` fast-path | 30 → 22 ns | Cheaper than `Date.now()` (~22 vs ~26 ns). `Date.now()` called only once per ms for accurate timestamps. |
+| 4096-byte entropy pool | amortized | `crypto.getRandomValues()` cost (~675 ns) spread over ~409 UUID generations. |
 
 ## API Reference
 
