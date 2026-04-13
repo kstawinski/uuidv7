@@ -1,6 +1,6 @@
 {
   "name": "@kstawinski/uuidv7",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Ultra-fast, RFC 9562 compliant UUIDv7 generator for Node.js, browsers, and edge runtimes",
   "type": "module",
   "main": "./dist/index.cjs",
