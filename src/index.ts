@@ -1,4 +1,4 @@
-import { bytesToUuid, EntropyPool } from './utils.js';
+import { bytesToUuid, EntropyPool, HEX } from './utils.js';
 
 /**
  * Branded type for UUIDv7 strings.
@@ -39,8 +39,11 @@ class V7Generator {
    */
   private newMs(now: number): void {
     this.lastMs = now;
-    this.pool.fill(this.b, 6, 10); // rand_a seed + rand_b
+    this.pool.fill10(this.b, 6); // rand_a seed + rand_b
     this.seq = ((this.b[6] & 0x0f) << 8) | this.b[7];
+
+    // Set variant (10xx) once per ms — hot path skips this
+    this.b[8] = (this.b[8] & 0x3f) | 0x80;
 
     // Write 48-bit timestamp
     const b = this.b;
@@ -72,13 +75,18 @@ class V7Generator {
       this.handleOverflow();
     }
 
-    // Hot path: only write version + counter + variant (timestamp unchanged)
+    // Hot path: only write version + counter (timestamp & variant unchanged)
     const b = this.b;
     b[6] = 0x70 | ((this.seq >>> 8) & 0x0f);
     b[7] = this.seq & 0xff;
-    b[8] = (b[8] & 0x3f) | 0x80;
 
-    return bytesToUuid(b) as UUIDv7;
+    return (
+      HEX[b[0]] + HEX[b[1]] + HEX[b[2]] + HEX[b[3]] + '-' +
+      HEX[b[4]] + HEX[b[5]] + '-' +
+      HEX[b[6]] + HEX[b[7]] + '-' +
+      HEX[b[8]] + HEX[b[9]] + '-' +
+      HEX[b[10]] + HEX[b[11]] + HEX[b[12]] + HEX[b[13]] + HEX[b[14]] + HEX[b[15]]
+    ) as UUIDv7;
   }
 
   generateObj(): UUIDv7Object {
